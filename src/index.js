@@ -1,6 +1,4 @@
 import { EmailMessage } from "cloudflare:email";
-import { createMimeMessage } from "mimetext";
-
 const PostalMime = require("postal-mime");
 
 async function streamToArrayBuffer(stream, streamSize) {
@@ -23,35 +21,41 @@ export default {
     const rawEmail = await streamToArrayBuffer(event.raw, event.rawSize);
     const parser = new PostalMime.default();
     const parsedEmail = await parser.parse(rawEmail);
-    console.log("Mail subject: ", parsedEmail.subject);
-    console.log("Mail message ID", parsedEmail.messageId);
-    console.log("HTML version of Email: ", parsedEmail.html);
-    console.log("Text version of Email: ", parsedEmail.text);
-    if (parsedEmail.attachments.length == 0) {
-      console.log("No attachments");
-    } else {
-      parsedEmail.attachments.forEach((att) => {
-        console.log("Attachment: ", att.filename);
-        console.log("Attachment disposition: ", att.disposition);
-        console.log("Attachment mime type: ", att.mimeType);
-        console.log("Attachment size: ", att.content.byteLength);
-      });
-    }
 
-    const msg = createMimeMessage();
-    msg.setSender({ name: "Auto-replier", addr: event.to });
-    msg.setRecipient(event.from);
-    msg.setSubject(`Re: ${parsedEmail.subject}`);
-    msg.setHeader("In-Reply-To", parsedEmail.messageId);
-    msg.addMessage({
-      contentType: "text/plain",
-      data: `This is an automated reply to your email with the subject ${parsedEmail.subject}.
-Number of attachments: ${parsedEmail.attachments.length}.
+    const emailSubject = parsedEmail.subject;
+    const emailFrom = event.from;
+    const emailTo = event.to;
+    const emailBody = parsedEmail.text || parsedEmail.html;
 
-good bye.`,
+    const webhookUrl = 'YOU-DISCORD-WEHOOK'; // replace with your Discord webhook URL
+
+    const payload = {
+      content: `**New Email Received**\n**From:** ${emailFrom}\n**To:** ${emailTo}\n**Subject:** ${emailSubject}\n**Body:**\n${emailBody}`
+    };
+
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
     });
 
-    var message = new EmailMessage(event.to, event.from, msg.asRaw());
-    await event.reply(message);
-  },
+    // You can forward the email to another address if needed
+    // const forwardPayload = {
+    //   personalizations: [{ to: [{ email: 'inbox@yourdomain.com' }] }],
+    //   from: { email: emailTo },
+    //   subject: `Fwd: ${emailSubject}`,
+    //   content: [{ type: 'text/plain', value: emailBody }]
+    // };
+
+    // await fetch('https://api.sendgrid.com/v3/mail/send', {
+    //   method: 'POST',
+    //   headers: {
+    //     'Authorization': `Bearer YOUR_SENDGRID_API_KEY`,
+    //     'Content-Type': 'application/json'
+    //   },
+    //   body: JSON.stringify(forwardPayload)
+    // });
+  }
 };
